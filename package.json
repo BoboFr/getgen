@@ -1,10 +1,9 @@
 {
   "name": "getgen",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Framework d'intelligence artificielle avec outils",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "private": true,
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",

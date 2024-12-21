@@ -23,15 +23,6 @@ Un framework TypeScript moderne pour créer des applications d'intelligence arti
 npm install getgen
 ```
 
-## 🛠️ Configuration
-
-1. Créez un fichier `.env` à la racine de votre projet
-2. Configurez vos variables d'environnement :
-
-```env
-OLLAMA_HOST=http://localhost:11434
-```
-
 ## 📖 Guide d'utilisation
 
 ### Configuration de base
