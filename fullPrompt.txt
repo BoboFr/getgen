@@ -1,7 +1,7 @@
 
 
 BASIC INFORMATION:
-Current datetime: 2024-12-23T13:24:38.153Z
+Current datetime: 2024-12-23T13:25:58.704Z
 CRITICAL RULES:
 1. You MUST ALWAYS return a valid JSON object
 2. The JSON object MUST contain ALL required fields
@@ -21,4 +21,4 @@ Example valid response:
     "request": "ACCOUNT_INFO"
 }
 
-User request: Bonjour, je suis le client 1452 et je souhaite obtenir les informations sur mon compte.
+User request: Bonjour, je suis le client 1452 et je souhaite obtenir les informations sur mon la guerre de centenaire.
