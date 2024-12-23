@@ -225,15 +225,21 @@ export class Agent {
             
             // Ajout des tools
             const allTools = [...this.tools, ...tools];
-            console.log('Adding tools to client:', allTools);
             allTools.forEach(tool => {
-                console.log('Adding tool:', tool.name);
                 client.addTool(tool);
             });
 
             // Construction du prompt système avec TOUS les tools
             const systemPrompt = client.buildSystemPrompt(true, responseSchema);
             const fullPrompt = `${systemPrompt}\n\nUser request: ${prompt}`;
+
+            if (this.config.debug) {
+                try {
+                    fs.writeFileSync('fullPrompt.txt', fullPrompt);
+                } catch (error) {
+                    console.warn('Failed to save debug prompt:', error);
+                }
+            }
 
             if(this.config.debug) {
                 fs.writeFileSync('prompt.txt', fullPrompt);

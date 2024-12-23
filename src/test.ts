@@ -7,38 +7,41 @@ const agent = new Agent({
     debug: true
 });
 
-const customerSchema = z.object({
-    customer_id: z.string(),
+const promptAgent = new Agent({
+    modelName: 'qwen2:latest'
 });
 
-const parseCustomerID: Tool = {
-    name: 'parse_customer_id',
-    description: 'Parse the customer ID from a string',
+const customerIDParserTool: Tool = {
+    name: 'customer_parser_id',
+    description: 'Get the real customer ID',
     parameters: [
         {
-            name: 'customerid',
+            name: 'customer_id',
             type: 'string',
-            description: 'The customer ID to parse',
-            required: true
+            required: true,
+            description: 'The customer ID to get'
         }
     ],
-    execute: async (params: Record<string, any>): Promise<any> => {
-        console.log('params', params);
-        const customerID = String(params.customerid).padStart(7, '0');
-        return { customer_id: `C${customerID}` };
+    execute: async (params) => {
+        return {
+            success: true,
+            data: "C"+String(params.customer_id).padStart(7, '0')
+        }
     }
 };
+agent.addTools([]);
+
+const customerSchema = z.object({
+    customer_id: z.string().describe("The customer's ID as 1234"),
+    request: z.enum(["ACCOUNT_INFO", "ORDER_HISTORY", "UNKNOWN"]),
+});
 
 (async () => {
-    agent.addTools([parseCustomerID]);
-    console.log('Available tools:', agent.listTools());
-    const prompt = `Formate l'ID client 1451`;
+    const prompt = `Bonjour, je suis le client 1452 et je souhaite obtenir les informations sur mon compte.`;
     const res = await agent.executeWithSchema(customerSchema, {prompt});
-    console.log('Response:', res.response);
-    console.log('Parsed:', res.parsedResponse);
-    if(res.toolCalls && res.toolCalls.length > 0) {
-        console.log('Tool Call:', JSON.stringify(res.toolCalls[0], null, 2));
-    } else {
-        console.log('No tool calls made!');
+
+    if(res.parsedResponse){
+        console.log('Response:', res.parsedResponse);
     }
+
 })();

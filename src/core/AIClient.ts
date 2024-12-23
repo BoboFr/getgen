@@ -71,31 +71,7 @@ TOOL_CALL:
     }
 }
 
-2. Then, after getting the tool result, return ONLY the final JSON response.
-
-Example complete interaction:
-User: "Format customer ID 1234"
-Assistant's action:
-TOOL_CALL:
-{
-    "tool": "parse_customer_id",
-    "parameters": {
-        "customerid": "1234"
-    }
-}
-
-[After getting tool result: { "customer_id": "C0001234" }]
-Assistant's response:
-{
-    "customer_id": "C0001234"
-}
-
-CRITICAL RULES:
-1. You MUST ALWAYS use tools - NEVER process data yourself
-2. Tool calls MUST use the EXACT format shown above
-3. Parameters MUST be properly quoted strings
-4. NEVER include explanatory text - ONLY tool calls and final JSON
-5. Return the tool result AS IS in your response`;
+2. Then, after getting the tool result, return ONLY the final JSON response.`;
         }
 
         if (!responseSchema) return toolsPrompt;
@@ -117,7 +93,14 @@ CRITICAL RULES:
             }
 
             // Fonction récursive pour extraire la structure des champs
-            const extractFields = (obj: Record<string, z.ZodType<any>>, prefix = ''): Array<{ name: string; type: string; required: boolean; isNested: boolean }> => {
+            const extractFields = (obj: Record<string, z.ZodType<any>>, prefix = ''): Array<{ 
+                name: string; 
+                type: string; 
+                required: boolean; 
+                isNested: boolean; 
+                enumValues?: string[];
+                description?: string;
+            }> => {
                 return Object.entries(obj).flatMap(([key, value]) => {
                     if (!(value instanceof z.ZodType)) {
                         console.warn(`Invalid Zod type for field ${key}`);
@@ -141,33 +124,81 @@ CRITICAL RULES:
 
                     // Déterminer le type de base
                     let type = 'any';
+                    let enumValues: string[] | undefined;
+                    let description: string | undefined;
+
+                    // Extract description if available
+                    const desc = value._def.description;
+                    if (desc) {
+                        description = desc;
+                    }
+
                     if (value instanceof z.ZodString) type = 'string';
                     else if (value instanceof z.ZodNumber) type = 'number';
                     else if (value instanceof z.ZodBoolean) type = 'boolean';
                     else if (value instanceof z.ZodArray) type = 'array';
                     else if (value instanceof z.ZodNull) type = 'null';
                     else if (value instanceof z.ZodUndefined) type = 'undefined';
+                    else if (value instanceof z.ZodEnum) {
+                        type = 'enum';
+                        enumValues = value._def.values;
+                    }
 
                     return [{
                         name: fieldName,
                         type,
                         required: !value.isOptional(),
-                        isNested: false
+                        isNested: false,
+                        enumValues,
+                        description
                     }];
                 });
             };
 
             const fields = extractFields(shape);
 
-            const typeRules = fields.map(f => 
-                `- "${f.name}" must be a ${f.type}${f.required ? ' (required)' : ' (optional)'}`
-            ).join('\n');
+            const typeRules = fields.map(f => {
+                let rule = `- "${f.name}" must be a ${f.type}${f.required ? ' (required)' : ' (optional)'}`;
+                if (f.description) {
+                    rule += `: ${f.description}`;
+                }
+                if (f.enumValues) {
+                    rule += `. Valid values: ${f.enumValues.map(v => `"${v}"`).join(', ')}`;
+                }
+                return rule;
+            }).join('\n');
 
-            return `${toolsPrompt}
+            const schemaPrompt = `
+BASIC INFORMATION:
+Current datetime: ${new Date().toISOString()}
+CRITICAL RULES:
+1. You MUST ALWAYS return a valid JSON object
+2. The JSON object MUST contain ALL required fields
+3. Each field MUST have the correct type
+4. NEVER include any text before or after the JSON object
+5. NEVER include any comments or explanations
+6. For enum fields, you MUST use EXACTLY one of the specified values
 
 RESPONSE FORMAT:
 Your response must be a valid JSON object with these fields:
-${typeRules}`;
+${typeRules}
+
+Example valid response:
+{
+    ${fields.filter(f => f.required).map(f => {
+        if (f.type === 'string') return `"${f.name}": "example"`;
+        if (f.type === 'number') return `"${f.name}": 123`;
+        if (f.type === 'boolean') return `"${f.name}": true`;
+        if (f.type === 'enum' && f.enumValues) return `"${f.name}": "${f.enumValues[0]}"`;
+        return `"${f.name}": null`;
+    }).join(',\n    ')}
+}`;
+
+            const finalPrompt = enableToolUse ? 
+                `${toolsPrompt}\n${schemaPrompt}` :
+                `You are a helpful AI assistant that returns structured data.\n${schemaPrompt}`;
+
+            return finalPrompt;
         } catch (error) {
             console.warn('Failed to generate system prompt:', error);
             return toolsPrompt;
@@ -212,13 +243,10 @@ ${typeRules}`;
             eval_duration: number;
         };
 
-        console.log('Raw API response:', data);
 
         const responseText = data.response || '';
-        console.log('Response text:', responseText);
 
         const toolCalls = this.extractToolCalls(responseText);
-        console.log('Extracted tool calls:', toolCalls);
 
         return {
             text: responseText,
@@ -232,7 +260,6 @@ ${typeRules}`;
     }
 
     private extractToolCalls(text: string): ToolCall[] {
-        console.log('Extracting tool calls from:', text);
         const toolCalls: ToolCall[] = [];
         const toolCallRegex = /TOOL_CALL:\s*{[\s\S]*?"tool":\s*"([^"]+)"[\s\S]*?"parameters":\s*({[\s\S]*?})\s*}/g;
         
@@ -241,7 +268,6 @@ ${typeRules}`;
             try {
                 const name = match[1];
                 const parameters = JSON.parse(match[2]);
-                console.log('Found tool call:', { name, parameters });
                 toolCalls.push({ name, parameters });
             } catch (error) {
                 console.error('Error parsing tool call:', error);
@@ -253,7 +279,6 @@ ${typeRules}`;
             try {
                 const obj = JSON.parse(text);
                 if (obj.tool && obj.parameters) {
-                    console.log('Found direct tool call:', obj);
                     toolCalls.push({
                         name: obj.tool,
                         parameters: obj.parameters
@@ -324,7 +349,6 @@ ${typeRules}`;
                 }
                 parsedResponse = options.responseSchema.parse(jsonResponse);
             } catch (error) {
-                console.error('Failed to parse response:', error);
             }
         }
 
@@ -338,7 +362,6 @@ ${typeRules}`;
 
     private async generateWithRetry(prompt: string): Promise<AIResponse> {
         const response = await this.generateRaw(prompt);
-        console.log('Raw response:', response);
         return response;
     }
 
@@ -408,7 +431,6 @@ ${typeRules}`;
                 try {
                     parsedResponse = schema.parse(lastResult);
                 } catch (e) {
-                    console.error('Failed to parse tool result:', e);
                 }
             }
         }

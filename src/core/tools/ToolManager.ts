@@ -8,12 +8,10 @@ export class ToolManager {
     }
 
     addTool(tool: Tool): void {
-        console.log('ToolManager: Adding tool:', tool.name);
         if (this.tools.has(tool.name)) {
             throw new Error(`Tool with name '${tool.name}' already exists`);
         }
         this.tools.set(tool.name, tool);
-        console.log('ToolManager: Current tools:', this.listTools());
     }
 
     removeTool(toolName: string): void {
@@ -28,7 +26,6 @@ export class ToolManager {
     }
 
     async executeTool(name: string, parameters: Record<string, any>): Promise<ToolResult> {
-        console.log('ToolManager: Executing tool:', name, 'with parameters:', parameters);
         try {
             const tool = this.tools.get(name);
             if (!tool) {
@@ -49,7 +46,6 @@ export class ToolManager {
             }
 
             const result = await tool.execute(parameters);
-            console.log('ToolManager: Tool execution result:', result);
             return {
                 success: true,
                 data: result
