@@ -84,6 +84,15 @@ CRITICAL RULES FOR TOOLS:
 
             const shape = responseSchema.shape as Record<string, z.ZodType<any>>;
 
+            // Créer une structure arborescente pour organiser les champs
+            interface TreeNode {
+                name: string;
+                type: string;
+                required: boolean;
+                isNested: boolean;
+                children: Record<string, TreeNode>;
+            }
+
             // Fonction récursive pour extraire la structure des champs
             const extractFields = (obj: Record<string, z.ZodType<any>>, prefix = ''): Array<{ name: string; type: string; required: boolean; isNested: boolean }> => {
                 return Object.entries(obj).flatMap(([key, value]) => {
@@ -127,17 +136,29 @@ CRITICAL RULES FOR TOOLS:
 
             const fields = extractFields(shape);
 
+            // Fonction récursive pour générer la structure JSON
+            const generateLevel = (node: Record<string, TreeNode>, level: number): string => {
+                const currentIndent = ' '.repeat(level);
+                let result = '';
+                
+                Object.values(node).forEach((field, index, array) => {
+                    const isLast = index === array.length - 1;
+                    const comma = isLast ? '' : ',';
+                    
+                    if (field.type === 'object') {
+                        result += `${currentIndent}"${field.name}": {${field.required ? ' (required)' : ' (optional)'}\n`;
+                        result += generateLevel(field.children, level + 4);
+                        result += `${currentIndent}}${comma}\n`;
+                    } else {
+                        result += `${currentIndent}"${field.name}": "${field.type}"${field.required ? ' (required)' : ' (optional)'}${comma}\n`;
+                    }
+                });
+
+                return result;
+            };
+
             // Générer la structure JSON attendue
             const generateJsonStructure = (fields: Array<{ name: string; type: string; required: boolean; isNested: boolean }>, indent = 0): string => {
-                // Créer une structure arborescente pour organiser les champs
-                interface TreeNode {
-                    name: string;
-                    type: string;
-                    required: boolean;
-                    isNested: boolean;
-                    children: Record<string, TreeNode>;
-                }
-
                 // Construire l'arbre
                 const root: Record<string, TreeNode> = {};
                 fields.forEach(field => {
@@ -158,30 +179,12 @@ CRITICAL RULES FOR TOOLS:
                                 children: {}
                             };
                         }
-                        currentLevel = currentLevel[part].children;
+
+                        if (!isLastPart) {
+                            currentLevel = currentLevel[part].children;
+                        }
                     }
                 });
-
-                // Fonction récursive pour générer la structure JSON
-                const generateLevel = (node: Record<string, TreeNode>, level: number): string => {
-                    const currentIndent = ' '.repeat(level);
-                    let result = '';
-
-                    Object.values(node).forEach((field, index, array) => {
-                        const isLast = index === array.length - 1;
-                        const comma = isLast ? '' : ',';
-
-                        if (field.type === 'object') {
-                            result += `${currentIndent}"${field.name}": {${field.required ? ' (required)' : ' (optional)'}\n`;
-                            result += generateLevel(field.children, level + 4);
-                            result += `${currentIndent}}${comma}\n`;
-                        } else {
-                            result += `${currentIndent}"${field.name}": "${field.type}"${field.required ? ' (required)' : ' (optional)'}${comma}\n`;
-                        }
-                    });
-
-                    return result;
-                };
 
                 return generateLevel(root, indent);
             };
