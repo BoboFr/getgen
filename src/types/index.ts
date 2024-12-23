@@ -5,6 +5,7 @@ export interface AIConfig {
     baseUrl: string;
     temperature?: number;
     maxTokens?: number;
+    debug?: boolean;
 }
 
 export interface AIResponse {

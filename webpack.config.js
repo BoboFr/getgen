@@ -1,14 +1,32 @@
 const path = require('path');
 const JavaScriptObfuscator = require('webpack-obfuscator');
+const nodeExternals = require('webpack-node-externals');
 
 module.exports = {
   entry: './src/index.ts',
   mode: 'production',
+  target: 'node',
+  externals: [nodeExternals()],
   module: {
     rules: [
       {
         test: /\.tsx?$/,
-        use: 'ts-loader',
+        use: [
+          {
+            loader: 'babel-loader',
+            options: {
+              presets: [
+                ['@babel/preset-env', {
+                  targets: {
+                    node: '12'
+                  }
+                }],
+                '@babel/preset-typescript'
+              ]
+            }
+          },
+          'ts-loader'
+        ],
         exclude: /node_modules/,
       },
     ],
@@ -43,5 +61,4 @@ module.exports = {
       unicodeEscapeSequence: false
     })
   ],
-  target: 'node'
 };

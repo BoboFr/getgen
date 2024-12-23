@@ -2,7 +2,8 @@ import {z} from 'zod'
 import { Agent } from './core';
 
 const agent = new Agent({
-    modelName: 'qwen2:latest'
+    modelName: 'qwen2:latest',
+    debug: true
 });
 
 const searchResponseSchame = z.object({
@@ -19,5 +20,5 @@ const searchResponseSchame = z.object({
 
 (async () => {
     const res = await agent.executeWithSchema(searchResponseSchame, {prompt:'Give me information about France'});
-    console.log(res.parsedResponse?.president);
+    console.log(res.parsedResponse);
 })();

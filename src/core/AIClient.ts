@@ -78,7 +78,6 @@ CRITICAL RULES FOR TOOLS:
 
         try {
             if (!(responseSchema instanceof z.ZodObject)) {
-                console.warn('Response schema must be a ZodObject');
                 return toolsPrompt;
             }
 

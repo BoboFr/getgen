@@ -49,8 +49,6 @@ describe('AIClient Integration Tests', () => {
             { enableToolUse: true }
         );
 
-        // Debug
-        console.log('Response:', result);
 
         // Assert
         expect(result.text).toBeTruthy();
@@ -87,9 +85,6 @@ describe('AIClient Integration Tests', () => {
             'Compte le nombre de caractères dans "Hello" puis dans "World" en utilisant l\'outil counter.',
             { enableToolUse: true }
         );
-
-        // Debug
-        console.log('Response:', result);
 
         // Assert
         expect(result.text).toBeTruthy();

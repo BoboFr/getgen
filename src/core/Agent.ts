@@ -1,6 +1,7 @@
 import { Tool, AIConfig, AIResponse, ToolCall } from '../types/index';
 import { AIClient } from './AIClient';
 import { z } from 'zod';
+import * as fs from 'fs';
 
 // Configuration par défaut
 const DEFAULT_CONFIG = {
@@ -8,7 +9,8 @@ const DEFAULT_CONFIG = {
     baseUrl: 'http://localhost:11434',
     temperature: 0.7,
     maxTokens: 2048,
-    maxRetries: 3
+    maxRetries: 3,
+    debug: false
 };
 
 /**
@@ -25,6 +27,7 @@ interface AgentOptions {
     temperature?: number;
     maxtokens?: number;
     maxRetries?: number;
+    debug?: boolean;
 }
 
 interface ExecuteOptions<T> {
@@ -57,7 +60,8 @@ export class Agent {
             modelName: options.modelName || DEFAULT_CONFIG.modelName,
             baseUrl: options.baseUrl || DEFAULT_CONFIG.baseUrl,
             temperature: options.temperature || DEFAULT_CONFIG.temperature,
-            maxTokens: options.maxtokens || DEFAULT_CONFIG.maxTokens
+            maxTokens: options.maxtokens || DEFAULT_CONFIG.maxTokens,
+            debug: options.debug || DEFAULT_CONFIG.debug
         };
         this.maxRetries = options.maxRetries || DEFAULT_CONFIG.maxRetries;
     }
@@ -229,6 +233,10 @@ export class Agent {
 
             // Construction du prompt système avec TOUS les tools
             const fullPrompt = `${prompt}`;
+
+            if(this.config.debug) {
+                fs.writeFileSync('prompt.txt', fullPrompt);
+            }
 
             // Exécution avec retry si nécessaire
             return await this.executeWithRetry<T>(
