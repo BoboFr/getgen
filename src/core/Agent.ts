@@ -93,10 +93,6 @@ export class Agent {
         return this.execute(options);
     }
 
-    private buildSystemPrompt(tools: Tool[], responseSchema?: z.ZodType<any>): string {
-        return `You are an AI assistant that helps answer questions.`;
-    }
-
     private convertToolCallsToResults(toolCalls?: ToolCall[]): ToolCallResult[] | undefined {
         if (!toolCalls) return undefined;
         return toolCalls.map(call => ({
@@ -229,24 +225,34 @@ export class Agent {
             
             // Ajout des tools
             const allTools = [...this.tools, ...tools];
-            allTools.forEach(tool => client.addTool(tool));
+            allTools.forEach(tool => {
+                client.addTool(tool);
+            });
 
             // Construction du prompt système avec TOUS les tools
-            const fullPrompt = `${prompt}`;
+            const systemPrompt = client.buildSystemPrompt(true, responseSchema);
+            const fullPrompt = `${systemPrompt}\n\nUser request: ${prompt}`;
+
+            if (this.config.debug) {
+                try {
+                    fs.writeFileSync('fullPrompt.txt', fullPrompt);
+                } catch (error) {
+                    console.warn('Failed to save debug prompt:', error);
+                }
+            }
 
             if(this.config.debug) {
                 fs.writeFileSync('prompt.txt', fullPrompt);
             }
 
-            // Exécution avec retry si nécessaire
-            return await this.executeWithRetry<T>(
+            return this.executeWithRetry(
                 client,
                 fullPrompt,
                 responseSchema,
                 maxRetries,
                 1,
                 [],
-                { enableToolUse: allTools.length > 0, responseSchema }
+                { enableToolUse: true, responseSchema }
             );
         } catch (error) {
             throw new Error(`Execution error: ${error instanceof Error ? error.message : 'Unknown error'}`);

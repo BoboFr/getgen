@@ -1,7 +1,7 @@
 import { Tool, ToolResult } from '../../types';
 
 export class ToolManager {
-    private tools: Map<string, Tool>;
+    private tools: Map<string, Tool> = new Map();
 
     constructor() {
         this.tools = new Map();
@@ -25,32 +25,33 @@ export class ToolManager {
         return Array.from(this.tools.values());
     }
 
-    async executeTool(toolName: string, params: Record<string, any>): Promise<ToolResult> {
+    async executeTool(name: string, parameters: Record<string, any>): Promise<ToolResult> {
         try {
-            const tool = this.tools.get(toolName);
+            const tool = this.tools.get(name);
             if (!tool) {
                 return {
                     success: false,
-                    error: `Tool '${toolName}' not found`
+                    error: `Tool '${name}' not found`
                 };
             }
 
             // Validation des paramètres
             for (const param of tool.parameters) {
-                if (param.required && !(param.name in params)) {
+                if (param.required && !(param.name in parameters)) {
                     return {
                         success: false,
-                        error: `Missing required parameter '${param.name}' for tool '${toolName}'`
+                        error: `Missing required parameter '${param.name}' for tool '${name}'`
                     };
                 }
             }
 
-            const result = await tool.execute(params);
+            const result = await tool.execute(parameters);
             return {
                 success: true,
                 data: result
             };
         } catch (error) {
+            console.error('ToolManager: Tool execution error:', error);
             return {
                 success: false,
                 error: error instanceof Error ? error.message : 'Unknown error occurred'
@@ -60,5 +61,9 @@ export class ToolManager {
 
     getToolSchema(toolName: string): Tool | undefined {
         return this.tools.get(toolName);
+    }
+
+    getTool(name: string): Tool | undefined {
+        return this.tools.get(name);
     }
 }

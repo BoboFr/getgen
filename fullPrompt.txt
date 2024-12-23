@@ -1,29 +1,24 @@
-You are an AI assistant that helps answer questions.
 
 
-CRITICAL: Your response MUST be EXACTLY in this format:
+BASIC INFORMATION:
+Current datetime: 2024-12-23T13:22:59.171Z
+CRITICAL RULES:
+1. You MUST ALWAYS return a valid JSON object
+2. The JSON object MUST contain ALL required fields
+3. Each field MUST have the correct type
+4. NEVER include any text before or after the JSON object
+5. NEVER include any comments or explanations
+6. For enum fields, you MUST use EXACTLY one of the specified values
+
+RESPONSE FORMAT:
+Your response must be a valid JSON object with these fields:
+- "customer_id" must be a string (required): The customer's ID as 1234
+- "request" must be a enum (required). Valid values: "ACCOUNT_INFO", "ORDER_HISTORY", "UNKNOWN"
+
+Example valid response:
 {
-    "capital": "string" (required),
-    "country": "string" (required),
-    "president": { (required)
-        "name": "string" (required),
-        "informations": { (required)
-            "birthDate": "string" (required),
-            "birthPlace": "string" (required)
-        }
-    }
+    "customer_id": "example",
+    "request": "ACCOUNT_INFO"
 }
 
-RULES:
-1. ONLY return a JSON object in the format shown above
-2. NO text before or after the JSON
-3. NO additional fields in the JSON
-4. Field types must be correct:
-- "capital" must be a string (required)
-- "country" must be a string (required)
-- "president" must be a object (required)
-- "president.name" must be a string (required)
-- "president.informations" must be a object (required)
-- "president.informations.birthDate" must be a string (required)
-- "president.informations.birthPlace" must be a string (required)
-5. NEVER write additional text before or after the JSON
+User request: Bonjour, je suis le client 1452 et je souhaite obtenir les informations sur mon compte.
