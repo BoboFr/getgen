@@ -81,7 +81,7 @@ We welcome contributions to GetGenAI! Here's how you can help:
 
 1. Clone the repository
    ```bash
-   git clone https://github.com/yourusername/getgenai.git
+   git clone https://github.com/BoboFr/getgenai.git
    cd getgenai
    ```
 
