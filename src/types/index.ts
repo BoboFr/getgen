@@ -16,6 +16,7 @@ export interface AIResponse {
         totalTokens: number;
     };
     toolCalls?: ToolCall[];
+    parsed?: any;
 }
 
 export interface ModelInfo {
@@ -72,6 +73,16 @@ export interface ToolCall {
     parameters: Record<string, any>;
     result?: ToolResult;
 }
+
+export interface Usage {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+}
+
+export type Schema<T> = {
+    parse: (value: unknown) => T;
+};
 
 export interface GenerateOptions {
     enableToolUse?: boolean;
