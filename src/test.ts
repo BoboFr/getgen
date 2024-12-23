@@ -8,10 +8,13 @@ const agent = new Agent({
 
 const searchResponseSchame = z.object({
     capital: z.string(),
-    population: z.number(),
+    information: z.object({
+        population: z.number(),
+        area: z.number()
+    })
 });
 
 (async() => {
-    const res = await agent.executeWithSchema(searchResponseSchame, {prompt:'What is the capital of France?'});
+    const res = await agent.executeWithSchema(searchResponseSchame, {prompt:'Give me information about Paris'});
     console.log(res);
 })();

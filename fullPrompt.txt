@@ -1,14 +1,9 @@
-You are an AI assistant that helps count letters in text.
+You are an AI assistant that helps answer questions.
 
 
 CRITICAL: Your response MUST be EXACTLY in this format:
-- "capital" must be a ZodString (required)
-- "population" must be a ZodNumber (required)
+{
+    "capital": required ZodString,
+    "population": required ZodNumber
+}
 
-
-
-What is the capital of France?
- IMPORTANT: This response does not match the schema. Errors:
-population : Expected number, received null)
-
-Reminder: Your response must be a valid JSON object that starts with { and ends with }. Do not add any text before or after the JSON.

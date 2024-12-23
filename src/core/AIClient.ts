@@ -86,7 +86,7 @@ CRITICAL RULES FOR TOOLS:
                 const type = def.typeName || (def.shape ? 'object' : 'any');
                 const required = !(value as any).isOptional();
 
-                if (type === 'object') {
+                if (type === 'ZodObject') {
                     const subFields = Object.entries(def.shape()).map(([subKey, subValue]) => ({
                         name: `${key}.${subKey}`,
                         type: (subValue as any)._def.typeName || 'any',
@@ -106,12 +106,35 @@ CRITICAL RULES FOR TOOLS:
                 `- "${f.name}" must be a ${f.type}${f.required ? ' (required)' : ' (optional)'}`
             ).join('\n');
 
-            const propmpt = `You are an AI assistant that helps count letters in text.
+            const informationFields = fields.filter(f => f.type === 'ZodObject').reduce((acc, f) => {
+                const key = f.name.split('.')[1];
+                acc[key] = {
+                    name: key,
+                    type: f.type,
+                    required: f.required
+                };
+                return acc;
+            }, {} as Record<string, { name: string; type: string; required: boolean }>);
+
+            const informationPrompt = `  "information": {
+    ${Object.entries(informationFields).map(([key, value]) => `"${key}": ${value.required ? 'required' : 'optional'} ${value.type}`).join(',\n    ')}
+  }`;
+            console.log(informationPrompt);
+            const propmpt = `You are an AI assistant that helps answer questions.
 ${toolsPrompt}
 
 CRITICAL: Your response MUST be EXACTLY in this format:
-${typeRules}
+{
+    ${fields.filter(f => f.type !== 'ZodObject').map(f => `"${f.name}": ${f.required ? 'required' : 'optional'} ${(f.type as z.ZodType)}`).join(',\n    ')}
+}
 
+RULES:
+1. ONLY return a JSON object in the format shown above
+2. NO text before or after the JSON
+3. NO additional fields in the JSON
+4. Field types must be correct:
+${typeRules}
+5. NEVER write additional text before or after the JSON
 `
 if(tools.length > 0) {
     `
@@ -131,15 +154,8 @@ Tool result: { "success": true, "data": { "result": 4 } }
 2. Format complete response:
 {
     ${fields.map(f => `"${f.name}": ${f.required ? 'required' : 'optional'} ${(f.type as z.ZodType)}`).join(',\n    ')}
-}
-
-RULES:
-1. ONLY return a JSON object in the format shown above
-2. NO text before or after the JSON
-3. NO additional fields in the JSON
-4. Field types must be correct:
-${typeRules}
-5. NEVER write additional text before or after the JSON`;
+}`;
+            console.log(propmpt);
             return propmpt;
         } catch (error) {
             console.warn('Failed to generate system prompt:', error);
