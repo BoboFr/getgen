@@ -6,7 +6,7 @@ GetGen is a TypeScript-based AI agent library that leverages the Zod schema vali
 
 ## GitHub Repository
 
-### Help is welcome
+### Please feel free to contribute, any help is welcome
 
 [https://github.com/BoboFr/getgen](https://github.com/BoboFr/getgen)
 
