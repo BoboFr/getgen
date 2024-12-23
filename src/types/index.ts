@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 export interface AIConfig {
     modelName: string;
     baseUrl: string;
@@ -67,9 +69,11 @@ export interface FunctionToToolOptions {
 export interface ToolCall {
     name: string;
     parameters: Record<string, any>;
+    result?: ToolResult;
 }
 
 export interface GenerateOptions {
     enableToolUse?: boolean;
     maxToolCalls?: number;
+    responseSchema?: z.ZodType<any>;
 }

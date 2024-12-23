@@ -17,7 +17,12 @@ describe('AIClient', () => {
         jest.clearAllMocks();
         // Mock de fetch
         global.fetch = jest.fn();
-        client = new AIClient(mockConfig);
+        client = new AIClient({
+            modelName: 'test-model',
+            baseUrl: 'http://test-api.com'
+        });
+        // Reset fetch mock
+        (global.fetch as jest.Mock).mockReset();
     });
 
     afterEach(() => {
@@ -114,17 +119,13 @@ describe('AIClient', () => {
         it('devrait gérer les appels aux tools', async () => {
             // Arrange
             const mockResponse = {
-                response: `<tool>
+                message: `<tool>
 name: testTool
 parameters:
   param: test
 </tool>
 Final response`,
-                usage: {
-                    prompt_tokens: 10,
-                    completion_tokens: 20,
-                    total_tokens: 30
-                }
+                done: true
             };
             (global.fetch as jest.Mock).mockResolvedValueOnce({
                 ok: true,
@@ -137,12 +138,8 @@ Final response`,
                 ok: true,
                 status: 200,
                 json: () => Promise.resolve({ 
-                    response: 'Final response with tool result',
-                    usage: {
-                        prompt_tokens: 15,
-                        completion_tokens: 25,
-                        total_tokens: 40
-                    }
+                    message: 'Final response with tool result',
+                    done: true
                 })
             });
 
@@ -170,23 +167,22 @@ Final response`,
         it('devrait ignorer les appels aux tools si enableToolUse est false', async () => {
             // Arrange
             const mockResponse = {
-                response: `<tool>
+                message: `<tool>
 name: testTool
 parameters:
   param: test
 </tool>
 Final response`,
-                usage: {
-                    prompt_tokens: 10,
-                    completion_tokens: 20,
-                    total_tokens: 30
-                }
+                done: true
             };
-            (global.fetch as jest.Mock).mockResolvedValueOnce({
-                ok: true,
-                status: 200,
-                json: () => Promise.resolve(mockResponse)
-            });
+
+            (global.fetch as jest.Mock).mockImplementation(() => 
+                Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: () => Promise.resolve(mockResponse)
+                })
+            );
 
             const mockTool: Tool = {
                 name: 'testTool',
@@ -205,54 +201,45 @@ Final response`,
             const result = await client.generate('Test prompt', { enableToolUse: false });
 
             // Assert
-            expect(result.text).toBe(mockResponse.response);
+            expect(result.text).toBe(mockResponse.message);
             expect(mockTool.execute).not.toHaveBeenCalled();
         });
 
         it('devrait limiter le nombre d\'appels aux tools', async () => {
             // Arrange
-            const mockResponse = {
-                response: `<tool>
+            (global.fetch as jest.Mock)
+                .mockResolvedValueOnce({
+                    ok: true,
+                    status: 200,
+                    json: () => Promise.resolve({
+                        message: `<tool>
 name: testTool
 parameters:
   param: test1
-</tool>
-<tool>
+</tool>`,
+                        done: false
+                    })
+                })
+                .mockResolvedValueOnce({
+                    ok: true,
+                    status: 200,
+                    json: () => Promise.resolve({
+                        message: `<tool>
 name: testTool
 parameters:
   param: test2
-</tool>
-<tool>
-name: testTool
-parameters:
-  param: test3
-</tool>
-Final response`,
-                usage: {
-                    prompt_tokens: 10,
-                    completion_tokens: 20,
-                    total_tokens: 30
-                }
-            };
-            (global.fetch as jest.Mock).mockResolvedValueOnce({
-                ok: true,
-                status: 200,
-                json: () => Promise.resolve(mockResponse)
-            });
-
-            // Mock pour le second appel après exécution des tools
-            (global.fetch as jest.Mock).mockResolvedValueOnce({
-                ok: true,
-                status: 200,
-                json: () => Promise.resolve({ 
-                    response: 'Final response',
-                    usage: {
-                        prompt_tokens: 15,
-                        completion_tokens: 25,
-                        total_tokens: 40
-                    }
+</tool>`,
+                        done: false
+                    })
                 })
-            });
+                .mockResolvedValueOnce({
+                    ok: true,
+                    status: 200,
+                    json: () => Promise.resolve({
+                        message: 'Final response',
+                        done: true
+                    })
+                });
 
             const mockTool: Tool = {
                 name: 'testTool',
@@ -272,9 +259,9 @@ Final response`,
 
             // Assert
             expect(result.text).toBe('Final response');
-            expect(mockTool.execute).toHaveBeenCalledTimes(2);
             expect(mockTool.execute).toHaveBeenCalledWith({ param: 'test1' });
             expect(mockTool.execute).toHaveBeenCalledWith({ param: 'test2' });
+            expect(mockTool.execute).toHaveBeenCalledTimes(2);
         });
 
         it('devrait gérer les erreurs de l\'API', async () => {
@@ -302,7 +289,7 @@ Final response`,
         it('devrait parser correctement différents types de valeurs de paramètres', async () => {
             // Arrange
             const mockResponse = {
-                response: `<tool>
+                message: `<tool>
 name: testTool
 parameters:
   stringParam: test
@@ -311,11 +298,7 @@ parameters:
   falseParam: false
 </tool>
 Final response`,
-                usage: {
-                    prompt_tokens: 10,
-                    completion_tokens: 20,
-                    total_tokens: 30
-                }
+                done: true
             };
             (global.fetch as jest.Mock).mockResolvedValueOnce({
                 ok: true,
@@ -328,12 +311,8 @@ Final response`,
                 ok: true,
                 status: 200,
                 json: () => Promise.resolve({ 
-                    response: 'Final response with tool result',
-                    usage: {
-                        prompt_tokens: 15,
-                        completion_tokens: 25,
-                        total_tokens: 40
-                    }
+                    message: 'Final response with tool result',
+                    done: true
                 })
             });
 

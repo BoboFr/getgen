@@ -167,7 +167,12 @@ Final response`,
             });
 
             // Assert
-            expect(result.response).toBe('Response with tool result');
+            expect(result.response).toBe(`<tool>
+name: testTool
+parameters:
+  param: test
+</tool>
+Final response`);
             expect(AIClient.prototype.executeTool).toHaveBeenCalledWith('testtool', { param: 'test' });
         });
     });

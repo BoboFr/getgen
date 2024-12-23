@@ -1,182 +1,100 @@
-# GetGen
+# GetGen AI Agent
 
-Un framework TypeScript moderne pour créer des applications d'intelligence artificielle avec Ollama.
+## Overview
 
-## 🌟 Caractéristiques
+GetGen is a TypeScript-based AI agent library that leverages the Zod schema validation library to create type-safe and reliable AI interactions.
 
-- 🚀 Framework léger et performant
-- 🔧 Outils d'IA intégrés
-- 📦 Support complet de TypeScript
-- ⚡ Intégration native avec Ollama
-- 🛡️ Validation des données avec Zod
-- 🧪 Tests unitaires avec Jest
+## Features
 
-## 📋 Prérequis
+- Supports AI model interactions with schema-based response validation
+- Easy-to-use Agent class for executing AI prompts
+- Built-in type safety with Zod schemas
 
-- Node.js (v16 ou supérieur)
-- TypeScript
-- Ollama (installé et configuré sur votre machine)
-
-## 🚀 Installation
+## Installation
 
 ```bash
-npm install getgen
+npm install getgenai
 ```
 
-## 📖 Guide d'utilisation
-
-### Configuration de base
+## Quick Start
 
 ```typescript
-import { Agent } from 'getgen';
+import {z} from 'zod'
+import { Agent } from './core';
 
-// Configuration personnalisée
+// Create an agent with a specific model
 const agent = new Agent({
-    modelName: 'llama3.2:3b',    // Modèle Ollama à utiliser
-    baseUrl: 'http://localhost:11434', // URL de l'API Ollama
-    temperature: 0.7,          // Contrôle de la créativité
-    maxtokens: 2048,          // Limite de tokens par réponse
-    maxRetries: 3             // Tentatives en cas d'erreur
+    modelName: 'qwen2:latest'
 });
-```
 
-### Utilisation avec validation Zod
-
-```typescript
-import { z } from 'zod';
-
-// Définition d'un schéma de validation
+// Define a response schema
 const searchResponseSchema = z.object({
-    title: z.string().min(1),
-    description: z.string().min(1),
-    url: z.string().url(),
-    relevance: z.number().min(0).max(100)
+    capital: z.string(),
+    population: z.number(),
 });
 
-// Exécution avec validation du schéma
-async function searchInfo() {
-    const result = await agent.executeWithSchema(searchResponseSchema, {
-        prompt: "Recherche des informations sur TurboSelf"
-    });
-
-    if (result.validationError) {
-        console.log('❌ Erreur :', result.validationError);
-    } else if (result.parsedResponse) {
-        console.log('✅ Résultat :', result.parsedResponse);
-    }
-
-    // Affichage des outils utilisés
-    if (result.toolCalls) {
-        result.toolCalls.forEach(call => {
-            console.log(`🔧 Outil : ${call.tool}`);
-            console.log(`   Paramètres :`, call.parameters);
-            console.log(`   Résultat :`, call.result);
-        });
-    }
-}
-```
-
-### Gestion des outils
-
-```typescript
-import { Tool } from 'getgen';
-
-// Définition d'un outil
-const searchTool: Tool = {
-    name: 'search',
-    description: 'Recherche des informations sur le web',
-    parameters: [
-        {
-            name: 'query',
-            type: 'string',
-            description: 'Terme de recherche',
-            required: true
-        }
-    ]
-};
-
-// Ajout d'outils à l'agent
-agent.addTools([searchTool]);
-
-// Liste des outils disponibles
-const tools = agent.listTools();
-```
-
-### Exécution sans schéma
-
-```typescript
-// Exécution simple sans validation
-const result = await agent.executeRaw({
-    prompt: "Quelle est la capitale de la France ?",
-    tools: [] // Optionnel : liste d'outils à utiliser
+// Execute an AI prompt with schema validation
+const res = await agent.executeWithSchema(searchResponseSchema, {
+    prompt: 'What is the capital of France?'
 });
-
-console.log('Réponse :', result.response);
+console.log(res);
 ```
 
-## 🏗️ Structure du projet
+## Dependencies
 
-```
-getgen/
-├── src/
-│   ├── core/       # Composants principaux
-│   │   ├── Agent.ts     # Agent principal
-│   │   └── AIClient.ts  # Client Ollama
-│   ├── tools/      # Outils d'IA
-│   ├── types/      # Définitions de types
-│   └── index.ts    # Point d'entrée
-├── tests/          # Tests unitaires
-└── ...
-```
+- Zod
+- TypeScript
 
-## 🧪 Tests
+## Contributing
 
-Le framework utilise Jest pour les tests unitaires. Pour exécuter les tests :
+We welcome contributions to GetGenAI! Here's how you can help:
 
-```bash
-npm test
-```
+### Ways to Contribute
 
-## 📚 Documentation API
+1. **Reporting Bugs**
+   - Use GitHub Issues to report bugs
+   - Provide a clear and detailed description
+   - Include steps to reproduce, expected behavior, and actual behavior
+   - Attach code samples or screenshots if possible
 
-### Classe Agent
+2. **Feature Requests**
+   - Open a GitHub Issue for new feature suggestions
+   - Describe the proposed feature and its potential benefits
+   - Discuss the feature's alignment with the project's goals
 
-#### Constructor
-```typescript
-new Agent(options?: AgentOptions)
-```
-- `options.modelName`: Nom du modèle Ollama (défaut: 'llama3.2:3b')
-- `options.baseUrl`: URL de l'API Ollama (défaut: 'http://localhost:11434')
-- `options.temperature`: Température des réponses (défaut: 0.7)
-- `options.maxtokens`: Limite de tokens (défaut: 2048)
-- `options.maxRetries`: Nombre max de tentatives (défaut: 3)
+3. **Code Contributions**
+   - Fork the repository
+   - Create a new branch for your feature or bugfix
+   - Follow our coding standards:
+     - Use TypeScript
+     - Maintain consistent code style
+     - Write comprehensive tests
+     - Update documentation
 
-#### Méthodes
-- `addTools(tools: Tool[])`: Ajoute des outils à l'agent
-- `listTools()`: Retourne la liste des outils disponibles
-- `executeWithSchema<S>(schema: S, options: ExecuteOptions)`: Exécute avec validation
-- `executeRaw(options: ExecuteOptions)`: Exécute sans validation
+### Development Setup
 
-## 🤝 Contribution
+1. Clone the repository
+   ```bash
+   git clone https://github.com/yourusername/getgenai.git
+   cd getgenai
+   ```
 
-Les contributions sont les bienvenues ! N'hésitez pas à :
+2. Install dependencies
+   ```bash
+   npm install
+   ```
 
-1. Fork le projet
-2. Créer une branche (`git checkout -b feature/AmazingFeature`)
-3. Commit vos changements (`git commit -m 'Add some AmazingFeature'`)
-4. Push sur la branche (`git push origin feature/AmazingFeature`)
-5. Ouvrir une Pull Request
+3. Run dev
+   ```bash
+   npm run dev
+   ```
 
-## 📄 Licence
+### Code of Conduct
 
-Ce projet est sous licence ISC. Voir le fichier `LICENSE` pour plus de détails.
+- Be respectful and inclusive
+- Provide constructive feedback
+- Collaborate openly and transparently
 
-## ✨ Auteurs
+### Questions?
 
-- [Votre nom]
-
-## 🙏 Remerciements
-
-- Ollama pour leur excellent modèle d'IA
-- La communauté TypeScript
-- Tous les contributeurs
+If you have any questions, please open an issue or contact the maintainers directly.
