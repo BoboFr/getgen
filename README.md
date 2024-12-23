@@ -20,7 +20,7 @@ npm install getgenai
 
 ```typescript
 import {z} from 'zod'
-import { Agent } from './core';
+import { Agent } from 'getgenai';
 
 // Create an agent with a specific model
 const agent = new Agent({
