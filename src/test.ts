@@ -1,4 +1,3 @@
-
 import {z} from 'zod'
 import { Agent } from './core';
 
@@ -8,10 +7,17 @@ const agent = new Agent({
 
 const searchResponseSchame = z.object({
     capital: z.string(),
-    population: z.number(),
+    country: z.string(),
+    president: z.object({
+        name: z.string(),
+        informations: z.object({
+            birthDate: z.string(),
+            birthPlace: z.string()
+        })
+    })
 });
 
-(async() => {
-    const res = await agent.executeWithSchema(searchResponseSchame, {prompt:'What is the capital of France?'});
-    console.log(res);
+(async () => {
+    const res = await agent.executeWithSchema(searchResponseSchame, {prompt:'Give me information about France'});
+    console.log(res.parsedResponse?.president);
 })();

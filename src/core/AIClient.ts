@@ -77,61 +77,127 @@ CRITICAL RULES FOR TOOLS:
         if (!responseSchema) return toolsPrompt;
 
         try {
-            const shape = (responseSchema as any)._def.shape?.();
-            if (!shape) return toolsPrompt;
+            if (!(responseSchema instanceof z.ZodObject)) {
+                console.warn('Response schema must be a ZodObject');
+                return toolsPrompt;
+            }
 
-            // Extraction des champs et de leurs types
-            const fields = Object.entries(shape).map(([key, value]) => {
-                const def = (value as any)._def;
-                const type = def.typeName || (def.shape ? 'object' : 'any');
-                const required = !(value as any).isOptional();
+            const shape = responseSchema.shape as Record<string, z.ZodType<any>>;
 
-                if (type === 'object') {
-                    const subFields = Object.entries(def.shape()).map(([subKey, subValue]) => ({
-                        name: `${key}.${subKey}`,
-                        type: (subValue as any)._def.typeName || 'any',
-                        required: !(subValue as any).isOptional()
-                    }));
-                    return subFields;
+            // Fonction récursive pour extraire la structure des champs
+            const extractFields = (obj: Record<string, z.ZodType<any>>, prefix = ''): Array<{ name: string; type: string; required: boolean; isNested: boolean }> => {
+                return Object.entries(obj).flatMap(([key, value]) => {
+                    if (!(value instanceof z.ZodType)) {
+                        console.warn(`Invalid Zod type for field ${key}`);
+                        return [];
+                    }
+
+                    const fieldName = prefix ? `${prefix}.${key}` : key;
+                    
+                    if (value instanceof z.ZodObject) {
+                        const nestedShape = value.shape as Record<string, z.ZodType<any>>;
+                        return [
+                            {
+                                name: fieldName,
+                                type: 'object',
+                                required: !value.isOptional(),
+                                isNested: true
+                            },
+                            ...extractFields(nestedShape, fieldName)
+                        ];
+                    }
+
+                    // Déterminer le type de base
+                    let type = 'any';
+                    if (value instanceof z.ZodString) type = 'string';
+                    else if (value instanceof z.ZodNumber) type = 'number';
+                    else if (value instanceof z.ZodBoolean) type = 'boolean';
+                    else if (value instanceof z.ZodArray) type = 'array';
+                    else if (value instanceof z.ZodNull) type = 'null';
+                    else if (value instanceof z.ZodUndefined) type = 'undefined';
+
+                    return [{
+                        name: fieldName,
+                        type,
+                        required: !value.isOptional(),
+                        isNested: false
+                    }];
+                });
+            };
+
+            const fields = extractFields(shape);
+
+            // Générer la structure JSON attendue
+            const generateJsonStructure = (fields: Array<{ name: string; type: string; required: boolean; isNested: boolean }>, indent = 0): string => {
+                // Créer une structure arborescente pour organiser les champs
+                interface TreeNode {
+                    name: string;
+                    type: string;
+                    required: boolean;
+                    isNested: boolean;
+                    children: Record<string, TreeNode>;
                 }
 
-                return [{
-                    name: key,
-                    type,
-                    required
-                }];
-            }).flat();
+                // Construire l'arbre
+                const root: Record<string, TreeNode> = {};
+                fields.forEach(field => {
+                    const parts = field.name.split('.');
+                    let currentLevel = root;
+
+                    // Parcourir chaque partie du chemin
+                    for (let i = 0; i < parts.length; i++) {
+                        const part = parts[i];
+                        const isLastPart = i === parts.length - 1;
+
+                        if (!currentLevel[part]) {
+                            currentLevel[part] = {
+                                name: part,
+                                type: isLastPart ? field.type : 'object',
+                                required: isLastPart ? field.required : true, // Les objets intermédiaires sont toujours requis
+                                isNested: !isLastPart,
+                                children: {}
+                            };
+                        }
+                        currentLevel = currentLevel[part].children;
+                    }
+                });
+
+                // Fonction récursive pour générer la structure JSON
+                const generateLevel = (node: Record<string, TreeNode>, level: number): string => {
+                    const currentIndent = ' '.repeat(level);
+                    let result = '';
+
+                    Object.values(node).forEach((field, index, array) => {
+                        const isLast = index === array.length - 1;
+                        const comma = isLast ? '' : ',';
+
+                        if (field.type === 'object') {
+                            result += `${currentIndent}"${field.name}": {${field.required ? ' (required)' : ' (optional)'}\n`;
+                            result += generateLevel(field.children, level + 4);
+                            result += `${currentIndent}}${comma}\n`;
+                        } else {
+                            result += `${currentIndent}"${field.name}": "${field.type}"${field.required ? ' (required)' : ' (optional)'}${comma}\n`;
+                        }
+                    });
+
+                    return result;
+                };
+
+                return generateLevel(root, indent);
+            };
 
             const typeRules = fields.map(f => 
                 `- "${f.name}" must be a ${f.type}${f.required ? ' (required)' : ' (optional)'}`
             ).join('\n');
 
-            const propmpt = `You are an AI assistant that helps count letters in text.
+            const jsonStructure = generateJsonStructure(fields, 4);
+            
+            let finalPrompt = `You are an AI assistant that helps answer questions.
 ${toolsPrompt}
 
 CRITICAL: Your response MUST be EXACTLY in this format:
-${typeRules}
-
-`
-if(tools.length > 0) {
-    `
-Example 1 :
-
-1. Use tool
-<tool>
-name: ${tools[0].name}
-parameters:
-    ${Object.entries(tools[0].parameters).map(([key, value]: [string, { type: string }]) => `${tools[0].parameters[0].name}: ${value.type}`).join(',\n')}
-</tool>
-Tool result: { "success": true, "data": { "result": 4 } }
-`
-}
-`
-
-2. Format complete response:
 {
-    ${fields.map(f => `"${f.name}": ${f.required ? 'required' : 'optional'} ${(f.type as z.ZodType)}`).join(',\n    ')}
-}
+${jsonStructure}}
 
 RULES:
 1. ONLY return a JSON object in the format shown above
@@ -139,8 +205,27 @@ RULES:
 3. NO additional fields in the JSON
 4. Field types must be correct:
 ${typeRules}
-5. NEVER write additional text before or after the JSON`;
-            return propmpt;
+5. NEVER write additional text before or after the JSON
+`;
+
+            if (tools.length > 0) {
+                finalPrompt += `\nExample 1:
+
+1. Use tool
+<tool>
+name: ${tools[0].name}
+parameters:
+${tools[0].parameters.map(p => `  ${p.name}: ${p.type === 'string' ? '"value"' : 'value'}`).join('\n')}
+</tool>
+Tool result: { "success": true, "data": { "result": 4 } }
+
+2. Format complete response:
+{
+${jsonStructure}}`;
+            }
+
+            fs.writeFileSync('fullPrompt.txt', finalPrompt)
+            return finalPrompt;
         } catch (error) {
             console.warn('Failed to generate system prompt:', error);
             return toolsPrompt;
