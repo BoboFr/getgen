@@ -289,13 +289,29 @@ export class Agent {
         }
     }
 
-    async chat(messages: { role: 'system' | 'user' | 'assistant'; content: string }[], options: { temperature?: number; model?: string; stream?: boolean } = {}): Promise<string> {
+    async chat(
+        messages: { role: 'system' | 'user' | 'assistant'; content: string }[], 
+        options: { temperature?: number; model?: string; stream?: boolean } = {}
+    ): Promise<{ role: 'assistant'; content: string; history: { role: 'system' | 'user' | 'assistant'; content: string }[] }> {
         const response = await this.client.chat({
             messages,
             temperature: options.temperature || this.config.temperature,
             model: options.model || this.config.modelName,
             stream: options.stream || false
         });
-        return response.content || response.text || '';
+
+        // Extraire uniquement le texte de la réponse
+        const responseText = typeof response.text === 'string' 
+            ? response.text 
+            : (response.text as any)?.content || '';
+        
+        // Ajouter la réponse de l'assistant à l'historique
+        const history = [...messages, { role: 'assistant' as const, content: responseText }];
+
+        return {
+            role: 'assistant',
+            content: responseText,
+            history
+        };
     }
 }
