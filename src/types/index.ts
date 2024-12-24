@@ -13,6 +13,12 @@ export interface ChatMessage {
     content: string;
 }
 
+export interface ChatResponse {
+    role: 'assistant';
+    content: string;
+    history: ChatMessage[];
+}
+
 export interface ChatOptions {
     messages: ChatMessage[];
     stream?: boolean;
