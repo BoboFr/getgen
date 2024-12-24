@@ -13,9 +13,37 @@ interface OllamaResponse {
         total_tokens: number;
     };
 }
-  
 
-export class AIClient {
+interface ChatMessage {
+    role: 'system' | 'user' | 'assistant';
+    content: string;
+}
+
+interface ChatOptions {
+    messages: ChatMessage[];
+    stream?: boolean;
+    temperature?: number;
+    model?: string;
+}
+
+interface OllamaChatResponse extends OllamaResponse {
+    model: string;
+    created_at: string;
+}
+
+export interface AIClientInterface {
+    listModels(): Promise<ModelInfo[]>;
+    generate(prompt: string, options?: GenerateOptions): Promise<AIResponse>;
+    generateRaw(prompt: string): Promise<AIResponse>;
+    chat(options: ChatOptions): Promise<AIResponse>;
+    executeTool(name: string, parameters: Record<string, any>): Promise<ToolResult>;
+    addTool(tool: Tool): void;
+    removeTool(toolName: string): void;
+    listTools(): Tool[];
+    buildSystemPrompt(enableToolUse: boolean, responseSchema?: z.ZodType<any>): string;
+}
+
+export class AIClient implements AIClientInterface {
     private config: AIConfig;
     private toolManager: ToolManager;
 
@@ -24,7 +52,7 @@ export class AIClient {
         this.toolManager = new ToolManager();
     }
 
-    async listModels(): Promise<ModelInfo[]> {
+    public async listModels(): Promise<ModelInfo[]> {
         try {
             const response = await fetch(`${this.config.baseUrl}/api/tags`);
             
@@ -40,6 +68,188 @@ export class AIClient {
             }
             throw error;
         }
+    }
+
+    public async generate(prompt: string, options: GenerateOptions = {}): Promise<AIResponse> {
+        const response = await this.generateRaw(prompt);
+        return {
+            text: response.text,
+            toolCalls: response.toolCalls,
+            usage: response.usage,
+            parsed: options.responseSchema ? options.responseSchema.safeParse(response.text) : undefined
+        };
+    }
+
+    public async generateRaw(prompt: string): Promise<AIResponse> {
+        const response = await fetch(`${this.config.baseUrl}/api/generate`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                model: this.config.modelName,
+                prompt,
+                stream: false,
+                options: {
+                    temperature: this.config.temperature,
+                    num_predict: (this.config.maxTokens || 2048) * 2,
+                    stop: [],
+                    num_ctx: 4096
+                }
+            }),
+        });
+
+        if (!response.ok) {
+            throw new Error(`API request failed with status ${response.status}`);
+        }
+
+        const data = await response.json() as {
+            model: string;
+            created_at: string;
+            response: string;
+            done: boolean;
+            done_reason: string;
+            context: number[];
+            total_duration: number;
+            load_duration: number;
+            prompt_eval_count: number;
+            prompt_eval_duration: number;
+            eval_count: number;
+            eval_duration: number;
+        };
+
+        const responseText = data.response || '';
+
+        return {
+            text: responseText,
+            toolCalls: this.extractToolCalls(responseText),
+            usage: {
+                promptTokens: data.prompt_eval_count,
+                completionTokens: data.eval_count,
+                totalTokens: data.prompt_eval_count + data.eval_count
+            }
+        };
+    }
+
+    public async chat(options: ChatOptions): Promise<AIResponse> {
+        try {
+            const response = await fetch(`${this.config.baseUrl}/api/chat`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    model: options.model || this.config.modelName,
+                    messages: options.messages,
+                    stream: options.stream || false,
+                    temperature: options.temperature || this.config.temperature,
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json() as OllamaChatResponse;
+            const content = data.message || data.response || '';
+
+            return {
+                text: content,
+                content,
+                usage: data.usage ? {
+                    promptTokens: data.usage.prompt_tokens,
+                    completionTokens: data.usage.completion_tokens,
+                    totalTokens: data.usage.total_tokens
+                } : undefined
+            };
+        } catch (error) {
+            if (error instanceof Error) {
+                throw new Error(`Chat request failed: ${error.message}`);
+            }
+            throw error;
+        }
+    }
+
+    public async executeTool(name: string, parameters: Record<string, any>): Promise<ToolResult> {
+        try {
+            const tools = this.toolManager.listTools();
+            const tool = tools.find(t => t.name === name);
+            
+            if (!tool) {
+                return {
+                    success: false,
+                    error: `Tool '${name}' not found`
+                };
+            }
+
+            // Validate required parameters
+            const missingParams = tool.parameters
+                .filter((p: { name: string; required: boolean }) => p.required && !(p.name in parameters))
+                .map((p: { name: string }) => p.name);
+
+            if (missingParams.length > 0) {
+                return {
+                    success: false,
+                    error: `Missing required parameters: ${missingParams.join(', ')}`
+                };
+            }
+
+            const result = await tool.execute(parameters);
+            return {
+                success: true,
+                data: result
+            };
+        } catch (error) {
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Unknown error'
+            };
+        }
+    }
+
+    public addTool(tool: Tool): void {
+        this.toolManager.addTool(tool);
+    }
+
+    public removeTool(toolName: string): void {
+        this.toolManager.removeTool(toolName);
+    }
+
+    public listTools(): Tool[] {
+        return this.toolManager.listTools();
+    }
+
+    private extractToolCalls(text: string): ToolCall[] {
+        const toolCalls: ToolCall[] = [];
+        const toolCallRegex = /TOOL_CALL:\s*{[\s\S]*?"tool":\s*"([^"]+)"[\s\S]*?"parameters":\s*({[\s\S]*?})\s*}/g;
+        
+        let match;
+        while ((match = toolCallRegex.exec(text)) !== null) {
+            try {
+                const name = match[1];
+                const parameters = JSON.parse(match[2]);
+                toolCalls.push({ name, parameters });
+            } catch (error) {
+                console.error('Error parsing tool call:', error);
+            }
+        }
+
+        // Also try parsing the entire text as a tool call
+        if (toolCalls.length === 0) {
+            try {
+                const obj = JSON.parse(text);
+                if (obj.tool && obj.parameters) {
+                    toolCalls.push({
+                        name: obj.tool,
+                        parameters: obj.parameters
+                    });
+                }
+            } catch (error) {
+                // Not a valid tool call JSON
+            }
+        }
+
+        return toolCalls;
     }
 
     public buildSystemPrompt(enableToolUse: boolean, responseSchema?: z.ZodType<any>): string {
@@ -82,80 +292,7 @@ TOOL_CALL:
             }
 
             const shape = responseSchema.shape as Record<string, z.ZodType<any>>;
-
-            // Créer une structure arborescente pour organiser les champs
-            interface TreeNode {
-                name: string;
-                type: string;
-                required: boolean;
-                isNested: boolean;
-                children: Record<string, TreeNode>;
-            }
-
-            // Fonction récursive pour extraire la structure des champs
-            const extractFields = (obj: Record<string, z.ZodType<any>>, prefix = ''): Array<{ 
-                name: string; 
-                type: string; 
-                required: boolean; 
-                isNested: boolean; 
-                enumValues?: string[];
-                description?: string;
-            }> => {
-                return Object.entries(obj).flatMap(([key, value]) => {
-                    if (!(value instanceof z.ZodType)) {
-                        console.warn(`Invalid Zod type for field ${key}`);
-                        return [];
-                    }
-
-                    const fieldName = prefix ? `${prefix}.${key}` : key;
-                    
-                    if (value instanceof z.ZodObject) {
-                        const nestedShape = value.shape as Record<string, z.ZodType<any>>;
-                        return [
-                            {
-                                name: fieldName,
-                                type: 'object',
-                                required: !value.isOptional(),
-                                isNested: true
-                            },
-                            ...extractFields(nestedShape, fieldName)
-                        ];
-                    }
-
-                    // Déterminer le type de base
-                    let type = 'any';
-                    let enumValues: string[] | undefined;
-                    let description: string | undefined;
-
-                    // Extract description if available
-                    const desc = value._def.description;
-                    if (desc) {
-                        description = desc;
-                    }
-
-                    if (value instanceof z.ZodString) type = 'string';
-                    else if (value instanceof z.ZodNumber) type = 'number';
-                    else if (value instanceof z.ZodBoolean) type = 'boolean';
-                    else if (value instanceof z.ZodArray) type = 'array';
-                    else if (value instanceof z.ZodNull) type = 'null';
-                    else if (value instanceof z.ZodUndefined) type = 'undefined';
-                    else if (value instanceof z.ZodEnum) {
-                        type = 'enum';
-                        enumValues = value._def.values;
-                    }
-
-                    return [{
-                        name: fieldName,
-                        type,
-                        required: !value.isOptional(),
-                        isNested: false,
-                        enumValues,
-                        description
-                    }];
-                });
-            };
-
-            const fields = extractFields(shape);
+            const fields = this.extractFields(shape);
 
             const typeRules = fields.map(f => {
                 let rule = `- "${f.name}" must be a ${f.type}${f.required ? ' (required)' : ' (optional)'}`;
@@ -194,256 +331,72 @@ Example valid response:
     }).join(',\n    ')}
 }`;
 
-            const finalPrompt = enableToolUse ? 
-                `${toolsPrompt}\n${schemaPrompt}` :
-                `You are a helpful AI assistant that returns structured data.\n${schemaPrompt}`;
-
-            return finalPrompt;
-        } catch (error) {
+            return enableToolUse ? `${toolsPrompt}\n${schemaPrompt}` : schemaPrompt;
+        } catch (error: any) {
             console.warn('Failed to generate system prompt:', error);
             return toolsPrompt;
         }
     }
 
-    async generateRaw(prompt: string): Promise<AIResponse> {
-        const response = await fetch(`${this.config.baseUrl}/api/generate`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                model: this.config.modelName,
-                prompt,
-                stream: false,
-                options: {
-                    temperature: this.config.temperature,
-                    num_predict: (this.config.maxTokens || 2048) * 2,
-                    stop: [],
-                    num_ctx: 4096
-                }
-            }),
+    private extractFields(obj: Record<string, z.ZodType<any>>, prefix = ''): Array<{ 
+        name: string; 
+        type: string; 
+        required: boolean; 
+        isNested: boolean; 
+        enumValues?: string[];
+        description?: string;
+    }> {
+        return Object.entries(obj).flatMap(([key, value]) => {
+            if (!(value instanceof z.ZodType)) {
+                console.warn(`Invalid Zod type for field ${key}`);
+                return [];
+            }
+
+            const fieldName = prefix ? `${prefix}.${key}` : key;
+            
+            if (value instanceof z.ZodObject) {
+                const nestedShape = value.shape as Record<string, z.ZodType<any>>;
+                return [
+                    {
+                        name: fieldName,
+                        type: 'object',
+                        required: !value.isOptional(),
+                        isNested: true
+                    },
+                    ...this.extractFields(nestedShape, fieldName)
+                ];
+            }
+
+            // Déterminer le type de base
+            let type = 'any';
+            let enumValues: string[] | undefined;
+            let description: string | undefined;
+
+            // Extract description if available
+            const desc = value._def.description;
+            if (desc) {
+                description = desc;
+            }
+
+            if (value instanceof z.ZodString) type = 'string';
+            else if (value instanceof z.ZodNumber) type = 'number';
+            else if (value instanceof z.ZodBoolean) type = 'boolean';
+            else if (value instanceof z.ZodArray) type = 'array';
+            else if (value instanceof z.ZodNull) type = 'null';
+            else if (value instanceof z.ZodUndefined) type = 'undefined';
+            else if (value instanceof z.ZodEnum) {
+                type = 'enum';
+                enumValues = value._def.values;
+            }
+
+            return [{
+                name: fieldName,
+                type,
+                required: !value.isOptional(),
+                isNested: false,
+                enumValues,
+                description
+            }];
         });
-
-        if (!response.ok) {
-            throw new Error(`API request failed with status ${response.status}`);
-        }
-
-        const data = await response.json() as {
-            model: string;
-            created_at: string;
-            response: string;
-            done: boolean;
-            done_reason: string;
-            context: number[];
-            total_duration: number;
-            load_duration: number;
-            prompt_eval_count: number;
-            prompt_eval_duration: number;
-            eval_count: number;
-            eval_duration: number;
-        };
-
-
-        const responseText = data.response || '';
-
-        const toolCalls = this.extractToolCalls(responseText);
-
-        return {
-            text: responseText,
-            toolCalls,
-            usage: {
-                promptTokens: data.prompt_eval_count,
-                completionTokens: data.eval_count,
-                totalTokens: data.prompt_eval_count + data.eval_count
-            }
-        };
-    }
-
-    private extractToolCalls(text: string): ToolCall[] {
-        const toolCalls: ToolCall[] = [];
-        const toolCallRegex = /TOOL_CALL:\s*{[\s\S]*?"tool":\s*"([^"]+)"[\s\S]*?"parameters":\s*({[\s\S]*?})\s*}/g;
-        
-        let match;
-        while ((match = toolCallRegex.exec(text)) !== null) {
-            try {
-                const name = match[1];
-                const parameters = JSON.parse(match[2]);
-                toolCalls.push({ name, parameters });
-            } catch (error) {
-                console.error('Error parsing tool call:', error);
-            }
-        }
-
-        // Also try parsing the entire text as a tool call
-        if (toolCalls.length === 0) {
-            try {
-                const obj = JSON.parse(text);
-                if (obj.tool && obj.parameters) {
-                    toolCalls.push({
-                        name: obj.tool,
-                        parameters: obj.parameters
-                    });
-                }
-            } catch (error) {
-                // Not a valid tool call JSON
-            }
-        }
-
-        return toolCalls;
-    }
-
-    async generate(prompt: string, options: GenerateOptions = {}): Promise<AIResponse> {
-        const response = await this.generateRaw(prompt);
-
-        let parsedResponse: any = undefined;
-        const toolCalls: ToolCall[] = [];
-
-        if (options.enableToolUse && response.toolCalls && response.toolCalls.length > 0) {
-            const maxCalls = options.maxToolCalls || 5;
-            let callCount = 0;
-
-            for (const toolCall of response.toolCalls) {
-                if (callCount >= maxCalls) break;
-
-                const tool = this.toolManager.getTool(toolCall.name);
-                if (!tool) {
-                    console.warn(`Tool ${toolCall.name} not found`);
-                    continue;
-                }
-
-                try {
-                    const result = await tool.execute(toolCall.parameters);
-                    toolCall.result = {
-                        success: true,
-                        data: result
-                    };
-                    // Use the tool result as the response if available
-                    if (result) {
-                        response.text = JSON.stringify(result, null, 4);
-                    }
-                } catch (error) {
-                    toolCall.result = {
-                        success: false,
-                        error: error instanceof Error ? error.message : String(error)
-                    };
-                }
-
-                toolCalls.push(toolCall);
-                callCount++;
-            }
-        }
-
-        if (options.responseSchema) {
-            try {
-                // Try to parse the response as JSON first
-                let jsonResponse;
-                const jsonMatch = response.text.match(/\{[\s\S]*\}/);
-                if (jsonMatch) {
-                    try {
-                        jsonResponse = JSON.parse(jsonMatch[0]);
-                    } catch (error) {
-                        jsonResponse = response.text;
-                    }
-                } else {
-                    jsonResponse = response.text;
-                }
-                parsedResponse = options.responseSchema.parse(jsonResponse);
-            } catch (error) {
-            }
-        }
-
-        return {
-            text: response.text,
-            parsed: parsedResponse, 
-            toolCalls,
-            usage: response.usage
-        };
-    }
-
-    private async generateWithRetry(prompt: string): Promise<AIResponse> {
-        const response = await this.generateRaw(prompt);
-        return response;
-    }
-
-    // Méthodes de gestion des tools
-    addTool(tool: Tool): void {
-        this.toolManager.addTool(tool);
-    }
-
-    removeTool(toolName: string): void {
-        this.toolManager.removeTool(toolName);
-    }
-
-    listTools(): Tool[] {
-        return this.toolManager.listTools();
-    }
-
-    async executeTool(name: string, parameters: Record<string, any>): Promise<ToolResult> {
-        try {
-            const tools = this.toolManager.listTools();
-            const tool = tools.find(t => t.name === name);
-            
-            if (!tool) {
-                return {
-                    success: false,
-                    error: `Tool '${name}' not found`
-                };
-            }
-
-            // Validate required parameters
-            const missingParams = tool.parameters
-                .filter((p: { name: string; required: boolean }) => p.required && !(p.name in parameters))
-                .map((p: { name: string }) => p.name);
-
-            if (missingParams.length > 0) {
-                return {
-                    success: false,
-                    error: `Missing required parameters: ${missingParams.join(', ')}`
-                };
-            }
-
-            return await tool.execute(parameters);
-        } catch (error) {
-            return {
-                success: false,
-                error: error instanceof Error ? error.message : 'Unknown error'
-            };
-        }
-    }
-
-    async executeWithSchema<T>(schema: Schema<T>, input: { prompt: string }): Promise<{ response: string; parsedResponse?: T; toolCalls: ToolCall[]; usage?: Usage }> {
-        const response = await this.generate(input.prompt);
-        const toolCalls = this.extractToolCalls(response.text);
-        let parsedResponse: T | undefined;
-
-        if (toolCalls.length > 0) {
-            const toolResults = await Promise.all(toolCalls.map(async (call) => {
-                const tool = this.toolManager.getTool(call.name);
-                if (!tool) {
-                    throw new Error(`Tool ${call.name} not found`);
-                }
-                return await tool.execute(call.parameters);
-            }));
-            
-            // Return the last tool result as the response
-            if (toolResults.length > 0) {
-                const lastResult = toolResults[toolResults.length - 1];
-                try {
-                    parsedResponse = schema.parse(lastResult);
-                } catch (e) {
-                }
-            }
-        }
-
-        return { 
-            response: response.text, 
-            parsedResponse, 
-            toolCalls,
-            usage: response.usage ? {
-                promptTokens: response.usage.promptTokens,
-                completionTokens: response.usage.completionTokens,
-                totalTokens: response.usage.totalTokens
-            } : undefined
-        };
     }
 }
