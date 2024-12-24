@@ -16,6 +16,7 @@ GetGen is a TypeScript-based AI agent library that leverages the Zod schema vali
 - Easy-to-use Agent class for executing AI prompts
 - Built-in type safety with Zod schemas
 - Extensible tool system for custom functionality
+- Chat-based interactions with AI models
 
 ## Installation
 
@@ -50,61 +51,6 @@ console.log(res);
 ## Tool System
 
 GetGen includes a powerful tool system that allows you to create custom tools for your AI agents. Here's how tools are structured:
-
-### Tool Interface
-
-```typescript
-interface Tool {
-    // Name of the tool
-    name: string;
-    
-    // Description of what the tool does
-    description: string;
-    
-    // List of parameters the tool accepts
-    parameters: ToolParameter[];
-    
-    // Function to execute the tool with given parameters
-    execute: (params: Record<string, any>) => Promise<any>;
-}
-
-// Parameter definition for tools
-interface ToolParameter {
-    // Parameter name
-    name: string;
-    
-    // Parameter type (string, number, boolean, array, object)
-    type: 'string' | 'number' | 'boolean' | 'array' | 'object';
-    
-    // Description of the parameter
-    description: string;
-    
-    // Whether the parameter is required
-    required: boolean;
-    
-    // For array types, defines the type of array items
-    items?: {
-        type: string;
-    };
-}
-```
-
-### Tool Results
-
-When a tool is executed, it returns a result in this format:
-
-```typescript
-interface ToolResult {
-    // Whether the tool execution was successful
-    success: boolean;
-    
-    // The data returned by the tool (if successful)
-    data?: any;
-    
-    // Error message (if execution failed)
-    error?: string;
-}
-```
 
 ### Tool Usage Example
 
@@ -174,47 +120,66 @@ const result = await calculatorTool.execute({
     b: 3
 });
 console.log(result); // { success: true, data: 8 }
-
-// Alternative way using ToolFactory
-import { ToolFactory } from 'getgenai';
-
-const calculatorToolFromFactory = ToolFactory.fromFunction(
-    async (operation: string, a: number, b: number) => {
-        // Same calculation logic as above
-        let result;
-        switch (operation) {
-            case 'add':
-                result = a + b;
-                break;
-            // ... other cases
-        }
-        return result;
-    },
-    {
-        name: 'calculator',
-        description: 'Performs basic arithmetic operations',
-        parameters: {
-            operation: {
-                type: 'string',
-                description: 'The operation to perform',
-                required: true
-            },
-            a: {
-                type: 'number',
-                description: 'First number',
-                required: true
-            },
-            b: {
-                type: 'number',
-                description: 'Second number',
-                required: true
-            }
-        }
-    }
-);
-
-// Note: The `execute` function is a required property of the Tool interface and must return a Promise. If you're getting TypeScript errors about missing call signatures, make sure you've included the `execute` function in your tool definition.
 ```
+
+## Chat Functionality
+
+GetGen now supports chat-based interactions with AI models. Here's how to use the chat functionality:
+
+```typescript
+import { Agent } from 'getgenai';
+
+// Create a chat agent
+const chatAgent = new Agent({
+    modelName: 'llama3.2:latest',
+    temperature: 0.8
+});
+
+// Simple chat interaction
+const chatResponse = await chatAgent.chat([
+    { role: 'system', content: 'You are a programming expert.' },
+    { role: 'user', content: 'What is TypeScript?' }
+]);
+
+// Access the response
+console.log(chatResponse.content);  // Latest response
+console.log(chatResponse.history);  // Full chat history
+
+// Continue the conversation
+const followUpResponse = await chatAgent.chat([
+    ...chatResponse.history,
+    { role: 'user', content: 'Can you show me an example?' }
+]);
+```
+
+### Chat with Tools
+
+You can also use tools in your chat interactions:
+
+```typescript
+// Create a tool-enabled agent
+const toolAgent = new Agent({
+    modelName: 'llama3.2:latest',
+    temperature: 0.2
+});
+
+// Add tools to the agent
+toolAgent.addTools([myTool]);
+
+// Chat with tool usage
+const toolChatResponse = await toolAgent.chat([
+    { 
+        role: 'system', 
+        content: 'You are an assistant that can use tools.' 
+    },
+    { 
+        role: 'user', 
+        content: 'Help me with a task that requires tools.' 
+    }
+]);
+```
+
+The chat functionality maintains conversation history and allows for natural, multi-turn interactions with the AI model while supporting tool usage when needed.
 
 ## Dependencies
 

@@ -189,8 +189,8 @@ async function testSchemaGeneration() {
 async function main() {
     try {
         await testSimpleChat();
-        /*await testToolChat();
-        await testSchemaGeneration();*/
+        await testToolChat();
+        await testSchemaGeneration();
     } catch (error) {
         console.error('Erreur dans le programme principal:', error);
     }
