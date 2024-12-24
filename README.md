@@ -54,22 +54,17 @@ GetGen includes a powerful tool system that allows you to create custom tools fo
 
 ### Tool Usage Example
 
-Here's how to create and use a simple tool:
+Here's how to create and use a simple calculator tool:
 
 ```typescript
-import { Tool, ToolParameter } from 'getgenai';
+import { Agent } from 'getgenai';
+import { Tool } from 'getgenai/types';
 
-// Define a simple calculator tool
+// Create a simple calculator tool
 const calculatorTool: Tool = {
     name: 'calculator',
     description: 'Performs basic arithmetic operations',
     parameters: [
-        {
-            name: 'operation',
-            type: 'string',
-            description: 'The operation to perform (add, subtract, multiply, divide)',
-            required: true
-        },
         {
             name: 'a',
             type: 'number',
@@ -81,46 +76,57 @@ const calculatorTool: Tool = {
             type: 'number',
             description: 'Second number',
             required: true
+        },
+        {
+            name: 'operation',
+            type: 'string',
+            description: 'Operation to perform (add, subtract, multiply, divide)',
+            required: true
         }
     ],
-    // The execute function is required and must return a Promise
-    execute: async (params: Record<string, any>): Promise<any> => {
-        const { operation, a, b } = params;
-        let result;
-        
+    execute: async (params: Record<string, any>) => {
+        const { a, b, operation } = params;
         switch (operation) {
             case 'add':
-                result = a + b;
-                break;
+                return { result: a + b };
             case 'subtract':
-                result = a - b;
-                break;
+                return { result: a - b };
             case 'multiply':
-                result = a * b;
-                break;
+                return { result: a * b };
             case 'divide':
-                if (b === 0) throw new Error('Division by zero');
-                result = a / b;
-                break;
+                if (b === 0) throw new Error('Division by zero is not allowed');
+                return { result: a / b };
             default:
-                throw new Error('Invalid operation');
+                throw new Error('Unsupported operation');
         }
-        
-        return {
-            success: true,
-            data: result
-        };
     }
 };
 
-// Use the tool
-const result = await calculatorTool.execute({
-    operation: 'add',
-    a: 5,
-    b: 3
+// Create an agent and add the tool
+const agent = new Agent({
+    modelName: 'llama3.2:latest',
+    temperature: 0.2  // Lower temperature for more precise calculations
 });
-console.log(result); // { success: true, data: 8 }
+
+// Add the tool to the agent
+agent.addTools([calculatorTool]);
+
+// Use the tool in a chat conversation
+const response = await agent.chat([
+    { 
+        role: 'system', 
+        content: 'You are a math assistant. Use the calculator tool to perform calculations.' 
+    },
+    { 
+        role: 'user', 
+        content: 'Can you calculate 15 + 27?' 
+    }
+]);
+
+console.log(response.content);  // The assistant will use the calculator tool to compute 15 + 27
 ```
+
+The tool system allows you to extend the agent's capabilities by providing custom functionality that the AI can use during conversations.
 
 ## Chat Functionality
 
