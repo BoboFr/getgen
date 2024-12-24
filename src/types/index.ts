@@ -8,8 +8,21 @@ export interface AIConfig {
     debug?: boolean;
 }
 
+export interface ChatMessage {
+    role: 'system' | 'user' | 'assistant';
+    content: string;
+}
+
+export interface ChatOptions {
+    messages: ChatMessage[];
+    stream?: boolean;
+    temperature?: number;
+    model?: string;
+}
+
 export interface AIResponse {
     text: string;
+    content?: string;
     usage?: {
         promptTokens: number;
         completionTokens: number;
